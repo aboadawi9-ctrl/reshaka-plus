@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>رشاقة بلس | المساعد الذكي</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --secondary: #2196F3;
+            --bg: #f8f9fa;
+            --card: #ffffff;
+            --text: #333;
+            --input-bg: #fff;
+        }
+
+        /* أنماط الوضع الليلي */
+        [data-theme="dark"] {
+            --bg: #121212;
+            --card: #1e1e1e;
+            --text: #e0e0e0;
+            --input-bg: #2d2d2d;
+            --secondary: #64b5f6;
+        }
+
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: var(--bg); 
+            color: var(--text);
+            margin: 0; padding: 20px;
+            transition: 0.3s ease;
+        }
+
+        .container { 
+            max-width: 850px; margin: auto; 
+            background: var(--card); 
+            padding: 30px; border-radius: 25px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        
+        .theme-toggle {
+            background: var(--primary); color: white; border: none; padding: 8px 15px;
+            border-radius: 20px; cursor: pointer; font-weight: bold;
+        }
+
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+        .card { 
+            background: var(--card); border: 1px solid rgba(128, 128, 128, 0.2); 
+            padding: 20px; border-radius: 20px; 
+        }
+
+        input { 
+            width: 90%; padding: 12px; margin: 10px 0; 
+            background: var(--input-bg); color: var(--text);
+            border: 1px solid #555; border-radius: 12px; outline: none;
+        }
+
+        button { 
+            width: 100%; padding: 12px; border: none; 
+            border-radius: 12px; font-weight: bold; cursor: pointer;
+            transition: 0.3s; color: white;
+        }
+        
+        .btn-main { background: var(--primary); }
+        .btn-calc { background: #ff9800; margin-top: 10px; }
+
+        .award-badge { font-size: 40px; margin: 5px; display: inline-block; }
+
+        .log-item { 
+            background: rgba(76, 175, 80, 0.1); padding: 12px; margin: 8px 0; 
+            border-radius: 12px; display: flex; justify-content: space-between;
+        }
+
+        #result-box { margin-top: 15px; padding: 10px; border-radius: 10px; background: rgba(33, 150, 243, 0.1); }
+
+        @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>رشاقة بلس 🍏</h1>
+        <button class="theme-toggle" onclick="toggleTheme()">الوضع الليلي/النهاري</button>
+    </header>
+
+    <div class="grid">
+        <div class="card">
+            <h3>🧮 حاسبة السعرات</h3>
+            <p style="font-size: 0.8rem;">احسب السعرات التقريبية للمحافظة على الوزن</p>
+            <input type="number" id="calc-weight" placeholder="الوزن الحالي (كجم)">
+            <button class="btn-calc" onclick="calculateCalories()">احسب احتياجي</button>
+            <div id="result-box" style="display:none;">
+                <small>تحتاج تقريباً إلى:</small>
+                <div id="calorie-result" style="font-weight: bold; font-size: 1.2rem;"></div>
+                <small>سعرة حرارية/يوم</small>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>📉 تتبع الوزن</h3>
+            <input type="number" id="weight" placeholder="سجل وزن اليوم (كجم)">
+            <button class="btn-main" onclick="updateProgress()">تحديث الرسم البياني</button>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 20px; text-align: center;">
+        <h3>🏆 خزانة الإنجازات</h3>
+        <div id="awardsList"></div>
+    </div>
+
+    <canvas id="weightChart"></canvas>
+
+    <div class="card" style="margin-top: 20px;">
+        <h3>🍱 سجل الوجبات والسعرات</h3>
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="foodInput" placeholder="اسم الوجبة">
+            <input type="number" id="calInput" placeholder="السعرات">
+        </div>
+        <button class="btn-main" onclick="addMeal()">إضافة للسجل</button>
+        <div id="mealLog" style="margin-top: 15px;"></div>
+    </div>
+</div>
+
+<script>
+    let weightData = JSON.parse(localStorage.getItem('weightHistory')) || [];
+    let meals = JSON.parse(localStorage.getItem('meals')) || [];
+    let chart;
+
+    window.onload = () => {
+        initChart();
+        meals.forEach(displayMeal);
+        checkAwards();
+        // تحميل الثيم المفضل
+        if(localStorage.getItem('theme') === 'dark') toggleTheme();
+    };
+
+    // 1. تبديل الوضع الليلي
+    function toggleTheme() {
+        const body = document.body;
+        if(body.getAttribute('data-theme') === 'dark') {
+            body.removeAttribute('data-theme');
+            localStorage.setItem('theme', 'light');
+        } else {
+            body.setAttribute('data-theme', 'dark');
+            localStorage.setItem('theme', 'dark');
+        }
+    }
+
+    // 2. حساب احتياج السعرات (معادلة تقريبية)
+    function calculateCalories() {
+        const w = document.getElementById('calc-weight').value;
+        if(w) {
+            const calories = Math.round(w * 30); // معادلة بسيطة: الوزن * 30
+            document.getElementById('calorie-result').innerText = calories;
+            document.getElementById('result-box').style.display = 'block';
+        }
+    }
+
+    function initChart() {
+        const ctx = document.getElementById('weightChart').getContext('2d');
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: weightData.map((_, i) => `يوم ${i+1}`),
+                datasets: [{
+                    label: 'الوزن (كجم)',
+                    data: weightData,
+                    borderColor: '#4CAF50',
+                    tension: 0.3,
+                    fill: false
+                }]
+            },
+            options: { responsive: true }
+        });
+    }
+
+    function updateProgress() {
+        const w = document.getElementById('weight').value;
+        if(w) {
+            weightData.push(w);
+            localStorage.setItem('weightHistory', JSON.stringify(weightData));
+            chart.data.labels.push(`يوم ${weightData.length}`);
+            chart.data.datasets[0].data.push(w);
+            chart.update();
+            checkAwards();
+            document.getElementById('weight').value = '';
+        }
+    }
+
+    function addMeal() {
+        const food = document.getElementById('foodInput').value;
+        const cal = document.getElementById('calInput').value;
+        if(food && cal) {
+            const meal = { food, cal };
+            meals.push(meal);
+            localStorage.setItem('meals', JSON.stringify(meals));
+            displayMeal(meal);
+            checkAwards();
+            document.getElementById('foodInput').value = '';
+            document.getElementById('calInput').value = '';
+        }
+    }
+
+    function displayMeal(meal) {
+        const div = document.createElement("div");
+        div.className = "log-item";
+        div.innerHTML = `<span><b>${meal.food}</b></span> <span>${meal.cal} سعرة</span>`;
+        document.getElementById('mealLog').prepend(div);
+    }
+
+    function checkAwards() {
+        const list = document.getElementById('awardsList');
+        list.innerHTML = '';
+        if (meals.length >= 1) list.innerHTML += '<span class="award-badge" title="بداية">🥗</span>';
+        if (meals.length >= 5) list.innerHTML += '<span class="award-badge" title="مثابر">🍎</span>';
+        if (weightData.length >= 3) list.innerHTML += '<span class="award-badge" title="تتبع">📉</span>';
+        if (weightData.length >= 10) list.innerHTML += '<span class="award-badge" title="بطل">👑</span>';
+    }
+</script>
+
+</body>
+</html>
